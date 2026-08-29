@@ -214,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
         filters = [
             "highpass=f=80:p=2",
             "adynamicequalizer=threshold=8:dfrequency=120:dqfactor=0.8:tfrequency=110:tqfactor=0.8:attack=2:release=80:ratio=8:range=12:auto=adaptive:mode=cutabove",
-            "adeclick=w=35:o=60:t=6:b=1",
+            "adeclick=w=55:o=75:t=2:b=2",
             "agate=threshold=0.015:range=0.35:ratio=2:attack=10:release=180:makeup=1:detection=rms",
             "equalizer=f=220:t=q:w=0.9:g=-2.5",
             "acompressor=threshold=0.10:ratio=2.5:attack=25:release=150:makeup=1:knee=3",
@@ -275,14 +275,15 @@ def main(argv: list[str] | None = None) -> int:
                 processing_source = dpdf_enhance(dpdf, processing_source, Path(temp.name) / "dpdf-enhanced.wav")
             print("Enhancing with ClearVoice MossFormer2 48 kHz (aggressive pass 1)…", file=sys.stderr)
             processing_source = clearvoice_enhance(processing_source, Path(temp.name) / "clearvoice-enhanced.wav")
+            print("Enhancing with ClearVoice MossFormer2 48 kHz (aggressive pass 2)…", file=sys.stderr)
+            processing_source = clearvoice_enhance(processing_source, Path(temp.name) / "clearvoice-enhanced-2.wav")
             if args.dereverb:
                 print("Finishing with DeepFilterNet3 voice cleanup…", file=sys.stderr)
                 processing_source = neural_enhance(neural, ffmpeg, processing_source, Path(temp.name))
             filters = [
                 "highpass=f=80:p=2",
                 "adynamicequalizer=threshold=8:dfrequency=120:dqfactor=0.8:tfrequency=110:tqfactor=0.8:attack=2:release=80:ratio=8:range=12:auto=adaptive:mode=cutabove",
-                # Conservative click repair: avoid smearing speech transients.
-                "adeclick=w=35:o=60:t=6:b=1",
+                "adeclick=w=55:o=75:t=2:b=2",
                 "agate=threshold=0.015:range=0.35:ratio=2:attack=10:release=180:makeup=1:detection=rms",
                 "equalizer=f=220:t=q:w=0.9:g=-2.5",
                 "acompressor=threshold=0.10:ratio=2.5:attack=25:release=150:makeup=1:knee=3",
