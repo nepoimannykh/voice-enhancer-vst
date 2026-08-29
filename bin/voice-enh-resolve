@@ -22,6 +22,7 @@ fi
 printf '%s\n' "$(date) args: $* input: $INPUT" >> "$LOG"
 if [ -z "$INPUT" ]; then echo "voice-enh-resolve: no input file in arguments or clipboard" >&2; exit 2; fi
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$PROJECT_DIR"
 set +e
 "$PROJECT_DIR/.venv/bin/python" -m voice_enh --resolve "$INPUT" >> "$LOG" 2>&1
 STATUS=$?
