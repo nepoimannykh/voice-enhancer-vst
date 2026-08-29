@@ -1,5 +1,9 @@
 #!/bin/sh
 set -eu
+# Resolve/AppleScript starts commands with a minimal PATH; include standard
+# Homebrew locations so ffmpeg and related tools are available.
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export PATH
 INPUT=""
 for ARG in "$@"; do
   if [ -f "$ARG" ]; then INPUT="$ARG"; break; fi
