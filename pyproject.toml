@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voice-enh"
+version = "0.1.0"
+description = "A focused CLI for turning everyday microphone recordings into polished voice audio"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "voice-enh contributors"}]
+
+[project.optional-dependencies]
+neural = ["deepfilternet>=0.5,<0.6", "dpdfnet>=0.5.1,<0.6", "clearvoice>=0.1.2", "numpy>=1.26,<2", "librosa>=0.11,<1", "scipy>=1.15,<1.16", "torch>=2.2,<2.3", "torchaudio>=2.2,<2.3"]
+
+[project.scripts]
+voice-enh = "voice_enh.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["voice_enh*"]

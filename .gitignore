@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+.models/
+checkpoints/
+voice_enh.egg-info/
+.DS_Store
+audio/*
+audio/*-enhanced.wav
+audio/*-deessed*.wav
+audio/*-compressed.wav
+audio/*-rich.wav
+audio/*-studio.wav
+audio/*-max.wav
+audio/*-mossformer*.wav
+audio/*-dpdf*.wav
