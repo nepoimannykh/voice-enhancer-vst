@@ -35,8 +35,6 @@ def parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--dereverb", action=argparse.BooleanOptionalAction, default=True,
                    help="run aggressive DPDFNet dereverb before DeepFilterNet (default: on)")
-    p.add_argument("--voicefixer", action=argparse.BooleanOptionalAction, default=True,
-                   help="run VoiceFixer neural restoration after MossFormer2 (default: on)")
     p.add_argument("--resolve", action="store_true",
                    help="process the input file in place for DaVinci Resolve External Audio Process")
     p.add_argument("--deesser", action=argparse.BooleanOptionalAction, default=True,
@@ -99,13 +97,6 @@ def clearvoice_enhance(source: Path, destination: Path) -> Path:
     result = run([sys.executable, "-m", "voice_enh.clearvoice_runner", str(source), str(destination)], capture=True)
     if result.returncode or not destination.is_file():
         raise RuntimeError(result.stderr.strip() or "ClearVoice enhancement failed")
-    return destination
-
-
-def voicefixer_enhance(source: Path, destination: Path) -> Path:
-    result = run([sys.executable, "-m", "voice_enh.voicefixer_runner", str(source), str(destination)], capture=True)
-    if result.returncode or not destination.is_file():
-        raise RuntimeError(result.stderr.strip() or "VoiceFixer enhancement failed")
     return destination
 
 
@@ -255,12 +246,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.engine == "neural" and args.dereverb and not dpdf:
         print("error: install DPDFNet with .venv/bin/python -m pip install dpdfnet or use --no-dereverb", file=sys.stderr)
         return 2
-    if args.engine == "neural" and args.voicefixer:
-        try:
-            import voicefixer  # noqa: F401
-        except ImportError:
-            print("error: install VoiceFixer with .venv/bin/python -m pip install voicefixer or use --no-voicefixer", file=sys.stderr)
-            return 2
 
     print(f"Measuring source loudness for exact matching…", file=sys.stderr)
     try:
@@ -290,9 +275,6 @@ def main(argv: list[str] | None = None) -> int:
                 processing_source = dpdf_enhance(dpdf, processing_source, Path(temp.name) / "dpdf-enhanced.wav")
             print("Enhancing with ClearVoice MossFormer2 48 kHz (aggressive pass 1)…", file=sys.stderr)
             processing_source = clearvoice_enhance(processing_source, Path(temp.name) / "clearvoice-enhanced.wav")
-            if args.voicefixer:
-                print("Restoring speech with VoiceFixer neural vocoder…", file=sys.stderr)
-                processing_source = voicefixer_enhance(processing_source, Path(temp.name) / "voicefixer-enhanced.wav")
             if args.dereverb:
                 print("Finishing with DeepFilterNet3 voice cleanup…", file=sys.stderr)
                 processing_source = neural_enhance(neural, ffmpeg, processing_source, Path(temp.name))
