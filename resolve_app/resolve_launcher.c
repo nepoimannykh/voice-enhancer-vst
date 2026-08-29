@@ -17,9 +17,23 @@ int main(int argc, char **argv) {
         }
     }
 
+    char clipboard[4096] = {0};
+    if (!input) {
+        FILE *pipe = popen("/usr/bin/pbpaste 2>/dev/null", "r");
+        if (pipe) {
+            if (fgets(clipboard, sizeof(clipboard), pipe)) {
+                clipboard[strcspn(clipboard, "\r\n")] = '\0';
+                struct stat st;
+                if (stat(clipboard, &st) == 0 && S_ISREG(st.st_mode)) input = clipboard;
+            }
+            pclose(pipe);
+        }
+    }
+
     FILE *log = fopen(log_path, "a");
     if (log) {
-        fprintf(log, "launcher invoked argc=%d input=%s\n", argc, input ? input : "");
+        fprintf(log, "launcher invoked argc=%d input=%s source=%s\n", argc,
+                input ? input : "", (argc > 1 && input && input != clipboard) ? "argv" : "clipboard");
         fflush(log);
     }
     if (!input) {
