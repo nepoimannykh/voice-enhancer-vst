@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -34,6 +35,8 @@ def parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--dereverb", action=argparse.BooleanOptionalAction, default=True,
                    help="run aggressive DPDFNet dereverb before DeepFilterNet (default: on)")
+    p.add_argument("--resolve", action="store_true",
+                   help="process the input file in place for DaVinci Resolve External Audio Process")
     p.add_argument("--deesser", action=argparse.BooleanOptionalAction, default=True,
                    help="adaptive sibilance detector/de-esser (default: on)")
     p.add_argument("--mono", action=argparse.BooleanOptionalAction, default=True, help="produce mono voice audio (default: on)")
@@ -199,10 +202,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: input file does not exist: {args.input}", file=sys.stderr)
         return 2
     output = args.output or args.input.with_name(f"{args.input.stem}-enhanced.wav")
-    if output.resolve() == args.input.resolve():
+    if args.resolve:
+        output = args.input.with_name(f".{args.input.stem}.voice-enh-resolve.wav")
+    if output.resolve() == args.input.resolve() and not args.resolve:
         print("error: output must differ from input", file=sys.stderr)
         return 2
-    if output.exists() and not args.force:
+    if output.exists() and not (args.force or args.resolve):
         print(f"error: output already exists: {output} (use --force to overwrite)", file=sys.stderr)
         return 2
     try:
@@ -287,7 +292,11 @@ def main(argv: list[str] | None = None) -> int:
         if result.returncode:
             print("error: FFmpeg processing failed", file=sys.stderr)
             return result.returncode
-        print(f"Created {output} (matched to {source_lufs:.1f} LUFS)")
+        if args.resolve:
+            os.replace(output, args.input)
+            print(f"Updated {args.input} (matched to {source_lufs:.1f} LUFS)")
+        else:
+            print(f"Created {output} (matched to {source_lufs:.1f} LUFS)")
         return 0
     except (RuntimeError, json.JSONDecodeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
