@@ -31,3 +31,16 @@ The default output is mono, 48 kHz, 24-bit WAV. Use `voice-enh --help` for optio
 - [FFmpeg compressor](https://ffmpeg.org/ffmpeg-filters.html#acompressor) — podcast dynamics
 - [FFmpeg de-esser](https://ffmpeg.org/ffmpeg-filters.html#deesser) — sibilance reduction
 - [FFmpeg loudnorm](https://ffmpeg.org/ffmpeg-filters.html#loudnorm) — source LUFS matching
+
+## DaVinci Resolve
+
+The repository includes `bin/voice-enh-resolve`, a one-shot External Audio Process launcher. It accepts Resolve’s bounced clip, processes it, and replaces that bounced file in place.
+
+1. Open **DaVinci Resolve > Preferences > System > Audio Plugins**.
+2. Under **Setup External Audio Processes**, click **Add**.
+3. Name it `voice-enh`.
+4. Set **Path** to `/Users/jenya/IdeaProjects/2026-2/voice-enh/bin/voice-enh-resolve`.
+5. Set **Type** to **Command Line**, save, and restart Resolve if prompted.
+6. In Fairlight, right-click a clip and choose **External Audio Process > voice-enh**.
+
+Resolve keeps the original clip and imports the processed result as a new layer.
