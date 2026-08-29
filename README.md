@@ -36,13 +36,13 @@ The default output is mono, 48 kHz, 24-bit WAV. Use `voice-enh --help` for optio
 
 ## DaVinci Resolve
 
-The repository includes `Voice Enhancer Resolve Event.app`, a macOS file-open event launcher for Resolve. It accepts Resolve’s bounced clip, processes it, and replaces that bounced file in place. Use this `.app` bundle in Resolve’s file picker; the older shell-only bundle does not receive Resolve’s file-open event.
+The repository includes `Voice Enhancer Resolve Event.app`, a macOS launcher for Resolve. Use the `.app` bundle (the `bin/` shell script is not selectable in Resolve’s application picker). The launcher accepts a file argument when Resolve supplies one and also reads the macOS clipboard for Resolve’s **Clipboard** mode.
 
 1. Open **DaVinci Resolve > Preferences > System > Audio Plugins**.
 2. Under **Setup External Audio Processes**, click **Add**.
 3. Name it `voice-enh`.
 4. Set **Path** to `/Users/jenya/IdeaProjects/2026-2/voice-enh/Voice Enhancer Resolve Event.app`.
-5. Set **Type** to **Command Line**, save, and restart Resolve if prompted.
+5. Set **Type** to **Clipboard**, save, and restart Resolve if prompted. Clipboard mode is intentional: Resolve places the bounced audio path on the clipboard instead of passing it as a command-line argument.
 6. In Fairlight, right-click a clip and choose **External Audio Process > voice-enh**.
 
-Resolve keeps the original clip and imports the processed result as a new layer.
+Resolve keeps the original clip and imports the processed result as a new layer. To diagnose a run, inspect `/tmp/voice-enh-resolve.log`; a successful invocation contains a `clipboard input:` (or `event input:`) line followed by `exit: 0`.

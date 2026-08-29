@@ -5,8 +5,18 @@ for ARG in "$@"; do
   if [ -f "$ARG" ]; then INPUT="$ARG"; break; fi
 done
 LOG=/tmp/voice-enh-resolve.log
+if [ -z "$INPUT" ] && command -v pbpaste >/dev/null 2>&1; then
+  # Resolve's Clipboard mode launches the command without argv and places
+  # the bounced file path on the macOS clipboard instead.
+  CLIP=$(pbpaste 2>/dev/null || true)
+  CLIP=$(printf '%s\n' "$CLIP" | sed -n '1p' | tr -d '\r')
+  if [ -f "$CLIP" ]; then
+    INPUT="$CLIP"
+    printf '%s\n' "$(date) clipboard input: $INPUT" >> "$LOG"
+  fi
+fi
 printf '%s\n' "$(date) args: $* input: $INPUT" >> "$LOG"
-if [ -z "$INPUT" ]; then echo "voice-enh-resolve: no input file in arguments" >&2; exit 2; fi
+if [ -z "$INPUT" ]; then echo "voice-enh-resolve: no input file in arguments or clipboard" >&2; exit 2; fi
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 set +e
 "$PROJECT_DIR/.venv/bin/python" -m voice_enh --resolve "$INPUT" >> "$LOG" 2>&1
