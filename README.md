@@ -36,12 +36,12 @@ The default output is mono, 48 kHz, 24-bit WAV. Use `voice-enh --help` for optio
 
 ## DaVinci Resolve
 
-The repository includes `Voice Enhancer Resolve.app`, a one-shot External Audio Process launcher. It accepts Resolve’s bounced clip, processes it, and replaces that bounced file in place. Use the `.app` bundle in Resolve’s file picker (some macOS Resolve versions do not allow selecting shell scripts).
+The repository includes `Voice Enhancer Resolve Event.app`, a macOS file-open event launcher for Resolve. It accepts Resolve’s bounced clip, processes it, and replaces that bounced file in place. Use this `.app` bundle in Resolve’s file picker; the older shell-only bundle does not receive Resolve’s file-open event.
 
 1. Open **DaVinci Resolve > Preferences > System > Audio Plugins**.
 2. Under **Setup External Audio Processes**, click **Add**.
 3. Name it `voice-enh`.
-4. Set **Path** to `/Users/jenya/IdeaProjects/2026-2/voice-enh/Voice Enhancer Resolve.app`.
+4. Set **Path** to `/Users/jenya/IdeaProjects/2026-2/voice-enh/Voice Enhancer Resolve Event.app`.
 5. Set **Type** to **Command Line**, save, and restart Resolve if prompted.
 6. In Fairlight, right-click a clip and choose **External Audio Process > voice-enh**.
 
