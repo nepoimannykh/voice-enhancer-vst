@@ -4,7 +4,12 @@ INPUT=""
 for ARG in "$@"; do
   if [ -f "$ARG" ]; then INPUT="$ARG"; break; fi
 done
-printf '%s\n' "$(date) args: $* input: $INPUT" >> /tmp/voice-enh-resolve.log
+LOG=/tmp/voice-enh-resolve.log
+printf '%s\n' "$(date) args: $* input: $INPUT" >> "$LOG"
 if [ -z "$INPUT" ]; then echo "voice-enh-resolve: no input file in arguments" >&2; exit 2; fi
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-exec "$PROJECT_DIR/.venv/bin/python" -m voice_enh --resolve "$INPUT"
+set +e
+"$PROJECT_DIR/.venv/bin/python" -m voice_enh --resolve "$INPUT" >> "$LOG" 2>&1
+STATUS=$?
+printf '%s\n' "$(date) exit: $STATUS" >> "$LOG"
+exit "$STATUS"
