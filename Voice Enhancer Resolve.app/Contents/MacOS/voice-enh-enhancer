@@ -1,8 +1,10 @@
 #!/bin/sh
 set -eu
-if [ "$#" -lt 1 ]; then
-  echo "voice-enh-resolve: Resolve did not provide an input file" >&2
-  exit 2
-fi
+INPUT=""
+for ARG in "$@"; do
+  if [ -f "$ARG" ]; then INPUT="$ARG"; break; fi
+done
+printf '%s\n' "$(date) args: $* input: $INPUT" >> /tmp/voice-enh-resolve.log
+if [ -z "$INPUT" ]; then echo "voice-enh-resolve: no input file in arguments" >&2; exit 2; fi
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../../../" && pwd)
-exec "$PROJECT_DIR/.venv/bin/python" -m voice_enh --resolve "$1"
+exec "$PROJECT_DIR/.venv/bin/python" -m voice_enh --resolve "$INPUT"
