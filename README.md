@@ -15,6 +15,8 @@ python -m pip install -e '.[neural]'
 
 Models download automatically on first use.
 
+Allow approximately **2 GB of free disk space**: about 1.1 GB for the Python/ML environment, 230 MB for bundled/downloaded model weights, and extra temporary space while processing. Individual WAV outputs require roughly 7 MB per minute at 48 kHz mono 24-bit.
+
 ## Usage
 
 ```sh
@@ -34,12 +36,12 @@ The default output is mono, 48 kHz, 24-bit WAV. Use `voice-enh --help` for optio
 
 ## DaVinci Resolve
 
-The repository includes `bin/voice-enh-resolve`, a one-shot External Audio Process launcher. It accepts Resolve’s bounced clip, processes it, and replaces that bounced file in place.
+The repository includes `Voice Enhancer Resolve.app`, a one-shot External Audio Process launcher. It accepts Resolve’s bounced clip, processes it, and replaces that bounced file in place. Use the `.app` bundle in Resolve’s file picker (some macOS Resolve versions do not allow selecting shell scripts).
 
 1. Open **DaVinci Resolve > Preferences > System > Audio Plugins**.
 2. Under **Setup External Audio Processes**, click **Add**.
 3. Name it `voice-enh`.
-4. Set **Path** to `/Users/jenya/IdeaProjects/2026-2/voice-enh/bin/voice-enh-resolve`.
+4. Set **Path** to `/Users/jenya/IdeaProjects/2026-2/voice-enh/Voice Enhancer Resolve.app`.
 5. Set **Type** to **Command Line**, save, and restart Resolve if prompted.
 6. In Fairlight, right-click a clip and choose **External Audio Process > voice-enh**.
 

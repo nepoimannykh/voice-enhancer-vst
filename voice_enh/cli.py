@@ -212,6 +212,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         filters = [
+            "highpass=f=80:p=2",
+            "equalizer=f=220:t=q:w=0.9:g=-2.5",
             "acompressor=threshold=0.10:ratio=2.5:attack=25:release=150:makeup=1:knee=3",
             "deesser=i=0.6:m=0.9:f=0.5",
         ] if args.deesser else ["acompressor=threshold=0.10:ratio=3:attack=8:release=120:makeup=1:knee=3"]
@@ -273,7 +275,11 @@ def main(argv: list[str] | None = None) -> int:
             if args.dereverb:
                 print("Finishing with DeepFilterNet3 voice cleanup…", file=sys.stderr)
                 processing_source = neural_enhance(neural, ffmpeg, processing_source, Path(temp.name))
-            filters = ["acompressor=threshold=0.10:ratio=2.5:attack=25:release=150:makeup=1:knee=3"]
+            filters = [
+                "highpass=f=80:p=2",
+                "equalizer=f=220:t=q:w=0.9:g=-2.5",
+                "acompressor=threshold=0.10:ratio=2.5:attack=25:release=150:makeup=1:knee=3",
+            ]
             if args.deesser:
                 filters.append("deesser=i=0.6:m=0.9:f=0.5")
 
