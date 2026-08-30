@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "voice-enh"
-version = "0.1.1"
+version = "0.1.2"
 description = "A focused CLI for turning everyday microphone recordings into polished voice audio"
 requires-python = ">=3.10"
 license = {text = "MIT"}

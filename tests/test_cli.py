@@ -10,6 +10,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(audio_args(Path("voice.wav")), ["-c:a", "pcm_s24le"])
         self.assertIn("libmp3lame", audio_args(Path("voice.mp3")))
 
+    def test_post_processing_has_no_gate_click_repair_or_extra_eq(self):
+        filters = base_filters("studio", None)
+        self.assertEqual(filters[0], "highpass=f=80:p=2")
+        self.assertTrue(any(value.startswith("acompressor=") for value in filters))
+        self.assertTrue(any(value.startswith("deesser=") for value in filters))
+        self.assertFalse(any(value.startswith(("agate=", "adeclick=", "equalizer=", "adynamicequalizer=")) for value in filters))
+
+    def test_deesser_can_be_disabled(self):
+        self.assertFalse(any(value.startswith("deesser=") for value in base_filters("studio", None, False)))
+
     def test_second_pass_loudness_parameters(self):
         measured = {"input_i": "-24", "input_lra": "4", "input_tp": "-3", "input_thresh": "-34", "target_offset": "0.2"}
         result = loudnorm_filter("studio", measured)
