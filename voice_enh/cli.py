@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -13,13 +14,6 @@ from . import __version__
 
 
 PRESETS = ("natural", "studio", "podcast")
-
-TARGETS = {
-    "natural": (-18.0, 9.0, -1.5),
-    "studio": (-16.0, 8.0, -1.0),
-    "podcast": (-16.0, 7.0, -1.0),
-}
-
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -35,10 +29,26 @@ def parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--dereverb", action=argparse.BooleanOptionalAction, default=True,
                    help="run aggressive DPDFNet dereverb before DeepFilterNet (default: on)")
+    p.add_argument(
+        "--dereverb-attn-limit-db", type=float,
+        help="limit DPDFNet dereverberation in dB; higher values apply more enhancement",
+    )
     p.add_argument("--resolve", action="store_true",
                    help="process the input file in place for DaVinci Resolve External Audio Process")
     p.add_argument("--deesser", action=argparse.BooleanOptionalAction, default=True,
                    help="adaptive sibilance detector/de-esser (default: on)")
+    p.add_argument(
+        "--adaptive-eq", action=argparse.BooleanOptionalAction, default=True,
+        help="calculate broad U87 tonal matching from the processed clip (default: on)",
+    )
+    p.add_argument(
+        "--eq-reference", type=Path,
+        help="optional clean speech reference used instead of the bundled U87 spectral profile",
+    )
+    p.add_argument(
+        "--compressor", choices=("buttercomp", "ffmpeg", "none"), default="buttercomp",
+        help="studio ButterComp2 (default), legacy FFmpeg compressor, or no compression",
+    )
     p.add_argument("--mono", action=argparse.BooleanOptionalAction, default=True, help="produce mono voice audio (default: on)")
     p.add_argument("--sample-rate", type=int, default=48000, choices=(44100, 48000))
     p.add_argument("-f", "--force", action="store_true", help="overwrite an existing output")
@@ -47,26 +57,44 @@ def parser() -> argparse.ArgumentParser:
     return p
 
 
-def base_filters(preset: str, noise_reduction: float | None, deesser: bool = True) -> list[str]:
+def base_filters(
+    deesser: bool = True, tonal_eq: list[str] | None = None, deesser_frequency: int | None = None
+) -> list[str]:
     filters = [
         "highpass=f=80:p=2",
-        "acompressor=threshold=0.10:ratio=2.5:attack=25:release=150:makeup=1:knee=3",
     ]
+    filters.extend(([
+        "equalizer=f=110:t=q:w=0.7:g=-2",
+        "equalizer=f=165:t=q:w=0.65:g=3",
+        "equalizer=f=380:t=q:w=0.55:g=-2.5",
+        "equalizer=f=900:t=q:w=0.45:g=2",
+        "equalizer=f=2500:t=q:w=0.5:g=-1",
+        "equalizer=f=4200:t=q:w=0.55:g=-2",
+        "equalizer=f=6800:t=q:w=0.45:g=1.5",
+    ] if tonal_eq is None else tonal_eq))
     if deesser:
-        filters.append("deesser=i=0.6:m=0.9:f=0.5")
+        # Center detection is clip-adaptive; stronger engagement catches the
+        # iPhone whistle while the reduction cap limits lisping.
+        normalized_frequency = 0.42 if deesser_frequency is None else deesser_frequency / 24000.0
+        filters.append(f"deesser=i=0.45:m=0.30:f={normalized_frequency:.4f}")
     return filters
 
 
-def loudnorm_filter(preset: str, measured: dict[str, str] | None = None) -> str:
-    loudness, range_, peak = TARGETS[preset]
-    value = f"loudnorm=I={loudness}:LRA={range_}:TP={peak}"
-    if measured:
-        value += (
-            f":measured_I={measured['input_i']}:measured_LRA={measured['input_lra']}"
-            f":measured_TP={measured['input_tp']}:measured_thresh={measured['input_thresh']}"
-            f":offset={measured['target_offset']}:linear=true"
-        )
-    return value
+def describe_dereverb(attn_limit_db: float | None) -> str:
+    if attn_limit_db is None:
+        return "full: unlimited, 100% enhanced signal"
+    enhanced = (1.0 - math.pow(10.0, -attn_limit_db / 20.0)) * 100.0
+    if attn_limit_db == 0:
+        level = "off"
+    elif attn_limit_db <= 3:
+        level = "light"
+    elif attn_limit_db <= 6:
+        level = "moderate"
+    elif attn_limit_db <= 9:
+        level = "strong"
+    else:
+        level = "aggressive"
+    return f"{level}: {attn_limit_db:g} dB limit, {enhanced:.0f}% enhanced blend"
 
 
 def audio_args(output: Path) -> list[str]:
@@ -159,7 +187,7 @@ def neural_enhance(neural: str, ffmpeg: str, source: Path, work: Path) -> Path:
     option = "--out-dir" if Path(neural).name == "deep-filter" else "--output-dir"
     # A modest attenuation ceiling preserves room tails and avoids the
     # over-dereverberated sound that unrestricted neural suppression can cause.
-    command = [neural, option, str(work), "--atten-lim", "12", str(model_input)]
+    command = [neural, option, str(work), "--atten-lim", "9", str(model_input)]
     bundled_model = Path(__file__).resolve().parent.parent / ".models" / "DeepFilterNet3"
     if bundled_model.is_dir():
         command[1:1] = ["--model-base-dir", str(bundled_model)]
@@ -176,10 +204,11 @@ def neural_enhance(neural: str, ffmpeg: str, source: Path, work: Path) -> Path:
     return max(candidates, key=lambda path: path.stat().st_mtime_ns)
 
 
-def dpdf_enhance(dpdf: str, source: Path, destination: Path) -> Path:
-    # Omit --attn-limit-db: DPDFNet then returns 100% enhanced signal. A value
-    # of 0 blends 100% of the delayed noisy reference back into the output.
-    result = run([dpdf, "enhance", str(source), str(destination), "--model", "dpdfnet8_48khz_hr"], capture=True)
+def dpdf_enhance(dpdf: str, source: Path, destination: Path, attn_limit_db: float | None = None) -> Path:
+    command = [sys.executable, "-m", "voice_enh.dpdf_runner", str(source), str(destination)]
+    if attn_limit_db is not None:
+        command.extend(["--attn-limit-db", str(attn_limit_db)])
+    result = run(command, capture=True)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "DPDFNet failed")
     if not destination.is_file():
@@ -187,15 +216,35 @@ def dpdf_enhance(dpdf: str, source: Path, destination: Path) -> Path:
     return destination
 
 
-def measure(ffmpeg: str, source: Path, filters: list[str], preset: str) -> dict[str, str]:
-    chain = ",".join(filters + [loudnorm_filter(preset) + ":print_format=json"])
-    result = run([ffmpeg, "-hide_banner", "-nostats", "-i", str(source), "-map", "0:a:0", "-af", chain, "-f", "null", "-"], capture=True)
-    if result.returncode:
-        raise RuntimeError(result.stderr.strip() or "FFmpeg analysis failed")
-    start, end = result.stderr.rfind("{"), result.stderr.rfind("}")
-    if start < 0 or end < start:
-        raise RuntimeError("FFmpeg did not return loudness measurements")
-    return json.loads(result.stderr[start : end + 1])
+def buttercomp_enhance(source: Path, destination: Path) -> str:
+    result = run(
+        [
+            sys.executable, "-m", "voice_enh.buttercomp_runner", str(source), str(destination),
+            "--compress", "1.0", "--wet", "0.85", "--drive-db", "3",
+        ],
+        capture=True,
+    )
+    if result.returncode or not destination.is_file():
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "ButterComp2 failed")
+    return result.stdout.strip()
+
+
+def studio_dsp_enhance(source: Path, destination: Path, bands: list, deesser_frequency: int | None) -> str:
+    payload = json.dumps([
+        {"frequency": band.frequency, "q": band.q, "gain_db": band.gain_db}
+        for band in bands
+        if band.gain_db != 0
+    ])
+    command = [
+        sys.executable, "-m", "voice_enh.studio_dsp_runner", str(source), str(destination),
+        "--bands-json", payload,
+    ]
+    if deesser_frequency is not None:
+        command.extend(["--deesser-frequency", str(deesser_frequency)])
+    result = run(command, capture=True)
+    if result.returncode or not destination.is_file():
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "studio DSP failed")
+    return result.stdout.strip()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -207,6 +256,12 @@ def main(argv: list[str] | None = None) -> int:
     if not args.input.is_file():
         print(f"error: input file does not exist: {args.input}", file=sys.stderr)
         return 2
+    if args.dereverb_attn_limit_db is not None and args.dereverb_attn_limit_db < 0:
+        print("error: --dereverb-attn-limit-db must be non-negative", file=sys.stderr)
+        return 2
+    if args.eq_reference is not None and not args.eq_reference.is_file():
+        print(f"error: EQ reference does not exist: {args.eq_reference}", file=sys.stderr)
+        return 2
     output = args.output or args.input.with_name(f"{args.input.stem}-enhanced.wav")
     if args.resolve:
         output = args.input.with_name(f".{args.input.stem}.voice-enh-resolve.wav")
@@ -217,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: output already exists: {output} (use --force to overwrite)", file=sys.stderr)
         return 2
     try:
-        filters = base_filters(args.preset, None, args.deesser)
+        filters = base_filters(args.deesser)
         codec = audio_args(output)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -228,6 +283,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.engine == "neural":
             print("DeepFilterNet: convert input to mono 48 kHz WAV, run neural enhancement")
         print("Restore the source's measured LUFS loudness")
+        print(f"Compressor: {args.compressor}")
         print(f"Output: {output}")
         return 0
 
@@ -253,9 +309,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    temp = tempfile.TemporaryDirectory(prefix="voice-enh-") if args.engine == "neural" else None
+    temp = tempfile.TemporaryDirectory(prefix="voice-enh-")
     try:
         processing_source = args.input
+        adaptive_bands = None
+        deesser_frequency = None
         if args.engine == "neural":
             # Prepare once at the model contract (mono, 48 kHz), then run the
             # high-impact dual-path stage before DeepFilterNet's final pass.
@@ -269,14 +327,70 @@ def main(argv: list[str] | None = None) -> int:
             print("Suppressing noise with DeepFilterNet3…", file=sys.stderr)
             processing_source = neural_enhance(neural, ffmpeg, model_input, Path(temp.name))
             if args.dereverb:
-                print("Running aggressive DPDFNet dereverb…", file=sys.stderr)
-                processing_source = dpdf_enhance(dpdf, processing_source, Path(temp.name) / "dpdf-enhanced.wav")
+                strength = args.dereverb_attn_limit_db
+                print(f"Running DPDFNet dereverb ({describe_dereverb(strength)})…", file=sys.stderr)
+                processing_source = dpdf_enhance(
+                    dpdf, processing_source, Path(temp.name) / "dpdf-enhanced.wav", strength
+                )
             print("Enhancing with ClearVoice MossFormer2 48 kHz (one pass)…", file=sys.stderr)
             processing_source = clearvoice_enhance(processing_source, Path(temp.name) / "clearvoice-enhanced.wav")
-            if args.dereverb:
-                print("Finishing with DeepFilterNet3 voice cleanup…", file=sys.stderr)
-                processing_source = neural_enhance(neural, ffmpeg, processing_source, Path(temp.name))
-            filters = base_filters(args.preset, None, args.deesser)
+            print("Preserving the natural room floor (no second cleanup pass)…", file=sys.stderr)
+
+        if args.adaptive_eq:
+            from .spectral_match import adaptive_u87_bands, describe_bands, ffmpeg_filters, sibilance_center
+
+            print("Calculating adaptive U87 spectral-envelope match…", file=sys.stderr)
+            bands = adaptive_u87_bands(processing_source, args.eq_reference)
+            adaptive_bands = bands
+            tonal_eq = ffmpeg_filters(bands)
+            deesser_frequency = sibilance_center(processing_source) if args.deesser else None
+            filters = base_filters(args.deesser, tonal_eq, deesser_frequency)
+            descriptions = describe_bands(bands)
+            if descriptions:
+                for description in descriptions:
+                    print(f"  EQ {description}", file=sys.stderr)
+            else:
+                print("  EQ no confident correction required", file=sys.stderr)
+            if deesser_frequency is not None:
+                print(f"  De-esser detected S center: {deesser_frequency / 1000:g} kHz", file=sys.stderr)
+        else:
+            print("Using fixed broad U87 tonal profile…", file=sys.stderr)
+            filters = base_filters(args.deesser)
+
+        if args.compressor == "buttercomp":
+            postfiltered = Path(temp.name) / "postfiltered.wav"
+            prepare_command = [
+                ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(processing_source),
+                "-map", "0:a:0", "-vn",
+            ]
+            if filters and adaptive_bands is None:
+                prepare_command.extend(["-af", ",".join(filters)])
+            prepare_command.extend(["-ac", "1", "-ar", "48000", "-c:a", "pcm_f32le", str(postfiltered)])
+            prepared = run(prepare_command, capture=True)
+            if prepared.returncode:
+                raise RuntimeError(prepared.stderr.strip() or "could not prepare audio for ButterComp2")
+            processing_source = Path(temp.name) / "buttercomp.wav"
+            if adaptive_bands is not None:
+                print(
+                    "Processing 80 Hz high-pass → Airwindows ButterComp2 → "
+                    "double-precision studio EQ → Airwindows DeBess…",
+                    file=sys.stderr,
+                )
+                compression_log = studio_dsp_enhance(
+                    postfiltered, processing_source, adaptive_bands,
+                    deesser_frequency if args.deesser else None,
+                )
+            else:
+                print("Compressing with Airwindows ButterComp2 (85% parallel blend)…", file=sys.stderr)
+                compression_log = buttercomp_enhance(postfiltered, processing_source)
+            if compression_log:
+                print(f"  {compression_log}", file=sys.stderr)
+            filters = []
+        elif args.compressor == "ffmpeg":
+            print("Compressing with legacy FFmpeg compressor…", file=sys.stderr)
+            filters.append("acompressor=threshold=0.20:ratio=1.3:attack=60:release=180:makeup=1:knee=3")
+        else:
+            print("Compression disabled…", file=sys.stderr)
 
         print(
             f"Restoring source loudness at {source_lufs:.1f} LUFS…",
@@ -303,8 +417,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     finally:
-        if temp is not None:
-            temp.cleanup()
+        temp.cleanup()
 
 
 if __name__ == "__main__":
